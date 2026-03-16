@@ -294,6 +294,10 @@ header p{color:var(--header-sub);font-size:12px;margin-top:3px;}
 .periode-result strong{display:block;font-size:13px;margin-bottom:4px;}
 .periode-affected-list{margin-top:6px;display:flex;flex-direction:column;gap:3px;}
 .periode-affected-item{font-size:11px;padding:3px 8px;background:rgba(239,68,68,0.1);border-radius:6px;}
+/* RAPPEL SERVICES BTN */
+.btn-rappel-services{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:10px 14px;border-radius:10px;border:none;background:#25D366;color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;-webkit-appearance:none;transition:all 0.15s;}
+.btn-rappel-services:active{opacity:0.8;transform:scale(0.97);}
+[data-theme="dark"] .btn-rappel-services{background:#22c55e;}
 /* TOAST */
 .toast-container{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:999;display:flex;flex-direction:column;gap:8px;pointer-events:none;}
 .toast{background:var(--toast-bg);color:#fff;padding:10px 18px;border-radius:30px;font-size:13px;font-weight:600;border:1.5px solid rgba(56,189,248,0.5);white-space:nowrap;animation:toastIn 0.3s ease;box-shadow:0 4px 20px rgba(0,0,0,0.4);}
@@ -810,7 +814,7 @@ function renderPlanning(){
           for(var ppi=0;ppi<persons.length;ppi++){var pn=persons[ppi],st=getStatus(pn,date,svc);html+='<span class="person-chip'+(st!=="normal"?" status-"+st:"")+'" data-person="'+esc(pn)+'" data-date="'+esc(date)+'" data-service="'+esc(svc)+'">'+esc(pn)+(st==="remplacer"?" ⚠️":(st==="indisponible"?" ❌":""))+"</span>";}
           html+="</div></div>";}
         if(svcs.length%2!==0&&si+2>svcs.length)html+='<div class="service-cell"></div>';html+="</div>";}
-      html+="</div></div>";}}
+      html+='<div style="padding:8px 11px;border-top:1px solid var(--row-border)"><button class="btn-rappel-services" data-rappel-date="'+esc(date)+'" data-rappel-display="'+esc(info.display)+'">📱 Rappel services</button></div></div></div>';}}
   document.getElementById("planning-content").innerHTML=html;
 }
 
@@ -941,6 +945,34 @@ function sendWA(){
   if(!msg){showToast("Message vide","warning");return;}
   var cp=phone.replace(/[\s\-\.]/g,"");if(cp.startsWith("0")&&cp.length===10)cp="+33"+cp.substring(1);
   window.open((cp?"https://wa.me/"+cp.replace(/[^0-9+]/g,"")+"?text=":"https://wa.me/?text=")+encodeURIComponent(msg),"_blank");
+}
+
+function envoyerRappelServices(dateStr,dateDisplay){
+  /* Trouver tous les services pour cette date */
+  var entries=RAW_DATA.filter(function(d){return d.date===dateStr;});
+  if(!entries.length){showToast("Aucun service trouv\u00e9","warning");return;}
+  /* Regrouper par personne */
+  var byPerson={};
+  entries.forEach(function(d){
+    var st=getStatus(d.person,d.date,d.service);
+    if(st==="indisponible")return; /* ignorer les indisponibles */
+    if(!byPerson[d.person])byPerson[d.person]=[];
+    byPerson[d.person].push(d.service);
+  });
+  var personnes=Object.keys(byPerson).sort();
+  if(!personnes.length){showToast("Aucune personne disponible","warning");return;}
+  /* Construire le message WhatsApp */
+  var msg="📅 *Rappel de services*\n";
+  msg+="🗓 *"+dateDisplay+"*\n\n";
+  msg+="Bonjour,\n\nVoici les services pr\u00e9vus pour aujourd\u0027hui :\n\n";
+  personnes.forEach(function(p){
+    var svcs=byPerson[p].map(function(s){return svcIcon(s)+" "+s;}).join(", ");
+    msg+="👤 *"+p+"* → "+svcs+"\n";
+  });
+  msg+="\nMerci d\u0027\u00eatre pr\u00e9sents et ponctuels ! 🙏";
+  /* Ouvrir WhatsApp */
+  window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank");
+  showToast("📱 Rappel WhatsApp ouvert","success");
 }
 
 function renderStats(){
@@ -1097,6 +1129,7 @@ function showTab(tab){
 document.addEventListener("click",function(e){
   var chip=e.target.closest(".person-chip");if(chip){openPopup(chip.getAttribute("data-person"),chip.getAttribute("data-date"),chip.getAttribute("data-service"));return;}
   var card=e.target.closest(".person-card");if(card){openPanel(card.getAttribute("data-person"));return;}
+  var rappelBtn=e.target.closest(".btn-rappel-services");if(rappelBtn){envoyerRappelServices(rappelBtn.getAttribute("data-rappel-date"),rappelBtn.getAttribute("data-rappel-display"));return;}
   var rc=e.target.closest(".replacement-chip");if(rc){var rn=rc.getAttribute("data-repl");if(popupCtx){document.getElementById("waMsg").value=buildWAMsg(rn,popupCtx.service,getDateDisplay(popupCtx.date)).replace(/\\n/g,"\n");document.getElementById("waSection").style.display="block";}showToast("📋 Message pour "+rn,"info");return;}
   if(e.target.id==="overlay"){closePanel();return;}
   if(e.target.closest("#panelClose")){closePanel();return;}
