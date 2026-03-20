@@ -348,10 +348,11 @@ header p{color:var(--header-sub);font-size:12px;margin-top:3px;}
       <select class="filter-select" id="monthFilter">
         <option value="">Tous les mois</option>
       </select>
-      <button class="filter-btn active" data-day="">Tous</button>
+      <button class="filter-btn" data-day="">Tous</button>
+      <button class="filter-btn active" id="filterWeek" data-day="">📅 Semaine</button>
       <button class="filter-btn" data-day="Mardi">Mardi</button>
-      <button class="filter-btn" data-day="Mercredi">Mercredi</button>
       <button class="filter-btn" data-day="Samedi">Samedi</button>
+      <button class="filter-btn" id="btnAjouterDate" style="background:var(--filter-bg);border-color:#9333EA;color:#9333EA;font-weight:700;">➕ Ajouter une date</button>
     </div>
     <div id="planning-content"></div>
   </div>
@@ -444,6 +445,31 @@ header p{color:var(--header-sub);font-size:12px;margin-top:3px;}
 </nav>
 
 <div class="toast-container" id="toastContainer"></div>
+
+<!-- Modal Ajouter une date -->
+<div class="popup-overlay" id="ajouterDateOverlay">
+  <div class="popup-box" style="max-width:520px;">
+    <div class="popup-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div>
+        <div class="popup-title">Planning Sono &amp; Accueil</div>
+        <div style="font-size:17px;font-weight:800;color:var(--text);">➕ Ajouter une date</div>
+      </div>
+      <button id="btnCloseAjouterDate" class="panel-close" style="position:relative;top:0;right:0;">✕</button>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:11px;font-weight:700;color:var(--service-label);text-transform:uppercase;letter-spacing:0.4px;display:block;margin-bottom:6px;">📅 Date du service</label>
+      <input type="date" id="ajouterDateInput" style="width:100%;padding:10px 14px;border:2px solid var(--accent);border-radius:10px;font-size:14px;font-family:inherit;background:var(--input-bg);color:var(--text);outline:none;">
+      <div id="ajouterDateDay" style="margin-top:6px;font-size:13px;font-weight:700;color:#38BDF8;min-height:20px;">Sélectionnez une date ci-dessus</div>
+      <input type="hidden" id="ajouterDateMonth">
+    </div>
+    <div id="ajouterPersonsWrap" style="display:none;">
+      <div style="font-size:11px;font-weight:700;color:var(--service-label);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:10px;padding-top:10px;border-top:2px dashed rgba(56,189,248,0.3);">👥 Personnes par service</div>
+      <div id="ajouterPersonsFields"></div>
+      <button id="btnSubmitAjouterDate" style="width:100%;margin-top:10px;padding:13px;background:linear-gradient(135deg,#6B21A8,#9333EA);color:#fff;border:none;border-radius:12px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;">✓ Enregistrer cette date</button>
+    </div>
+  </div>
+</div>
 <div class="overlay" id="overlay"></div>
 <div class="panel" id="panel">
   <div class="panel-hdr">
@@ -791,11 +817,25 @@ for(var i=0;i<RAW_DATA.length;i++){
 
 var todayStr=(function(){var n=new Date(),y=n.getFullYear(),mo=n.getMonth()+1,dy=n.getDate();return y+"-"+(mo<10?"0"+mo:mo)+"-"+(dy<10?"0"+dy:dy);})();
 
+var weekFilter=true; /* activé au démarrage */
+function getCurrWeek(){
+  var n=new Date(),dow=n.getDay(),diff=(dow===0)?-6:1-dow;
+  var mon=new Date(n);mon.setDate(n.getDate()+diff);mon.setHours(0,0,0,0);
+  var sun=new Date(mon);sun.setDate(mon.getDate()+6);sun.setHours(23,59,59,999);
+  function fmt(d){var y=d.getFullYear(),m=d.getMonth()+1,dd=d.getDate();return y+"-"+(m<10?"0"+m:m)+"-"+(dd<10?"0"+dd:dd);}
+  return{s:fmt(mon),e:fmt(sun)};
+}
+
 document.getElementById("darkToggle").addEventListener("click",function(){darkMode=!darkMode;document.documentElement.setAttribute("data-theme",darkMode?"dark":"");this.textContent=darkMode?"☀️":"🌙";try{localStorage.setItem(LS_DARK,darkMode?"1":"0");}catch(e){};});
 
 function renderPlanning(){
   var ms=document.getElementById("monthFilter").value;
-  var filtered=RAW_DATA.filter(function(d){return(!ms||d.month===ms)&&(!dayFilter||d.day===dayFilter);});
+  var filtered=RAW_DATA.filter(function(d){
+    if(ms&&d.month!==ms)return false;
+    if(dayFilter&&d.day!==dayFilter)return false;
+    if(weekFilter){var wr=getCurrWeek();if(d.date<wr.s||d.date>wr.e)return false;}
+    return true;
+  });
   var byDate={};
   for(var i=0;i<filtered.length;i++){var d=filtered[i];if(!byDate[d.date])byDate[d.date]={display:d.date_display,day:d.day,month:d.month,services:{}};if(!byDate[d.date].services[d.service])byDate[d.date].services[d.service]=[];if(byDate[d.date].services[d.service].indexOf(d.person)<0)byDate[d.date].services[d.service].push(d.person);}
   var dates=Object.keys(byDate).sort();
@@ -1135,7 +1175,9 @@ document.addEventListener("click",function(e){
   if(e.target.closest("#panelClose")){closePanel();return;}
   var bn=e.target.closest(".bnav-btn[data-tab]");if(bn){showTab(bn.getAttribute("data-tab"));return;}
   ["planning","myplan","persons","stats","dispo"].forEach(function(t){if(e.target.closest("#tab-"+t+"-btn"))showTab(t);});
-  var fb=e.target.closest(".filter-btn[data-day]");if(fb){dayFilter=fb.getAttribute("data-day");document.querySelectorAll(".filter-btn[data-day]").forEach(function(b){b.classList.remove("active");});fb.classList.add("active");renderPlanning();return;}
+  var fb=e.target.closest(".filter-btn[data-day]");if(fb&&fb.id!=="filterWeek"){weekFilter=false;dayFilter=fb.getAttribute("data-day");document.querySelectorAll(".filter-btn[data-day]").forEach(function(b){b.classList.remove("active");});fb.classList.add("active");renderPlanning();return;}
+  if(e.target.closest("#filterWeek")){weekFilter=!weekFilter;dayFilter="";document.querySelectorAll(".filter-btn[data-day]").forEach(function(b){b.classList.remove("active");});if(weekFilter)document.getElementById("filterWeek").classList.add("active");else{document.querySelector(".filter-btn[data-day='']").classList.add("active");}renderPlanning();return;}
+  if(e.target.closest("#btnAjouterDate")){openAjouterDate();return;}
   if(e.target.id==="btnRemplacer")applyStatus("remplacer");
   if(e.target.id==="btnIndisponible")applyStatus("indisponible");
   if(e.target.id==="btnNormal")applyStatus("normal");
@@ -1280,6 +1322,80 @@ requestNotifPermission();
 /* Vérifier les notifications toutes les 60 secondes */
 notifCheckInterval=setInterval(checkNotifications,60000);
 checkNotifications(); /* vérification immédiate */
+
+/* ============================================
+   AJOUTER UNE DATE
+   ============================================ */
+var AJOUTER_SERVICES=["Audio","Vidéo","Perches - Partie 1","Perches - Partie 2","Estrade","Estrade - Tablette","Accueil - Admission Zoom","Accueil - Ouverture","Accueil - Auditorium"];
+var DAYS_FR_LONG={1:"Lundi",2:"Mardi",3:"Mercredi",4:"Jeudi",5:"Vendredi",6:"Samedi",0:"Dimanche"};
+var MONTHS_LONG_AD=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+
+function openAjouterDate(){
+  document.getElementById("ajouterDateOverlay").classList.add("open");
+  document.getElementById("ajouterDateInput").value="";
+  document.getElementById("ajouterDateDay").textContent="Sélectionnez une date ci-dessus";
+  document.getElementById("ajouterPersonsWrap").style.display="none";
+  document.getElementById("ajouterPersonsFields").innerHTML="";
+}
+function closeAjouterDate(){document.getElementById("ajouterDateOverlay").classList.remove("open");}
+
+document.getElementById("ajouterDateInput").addEventListener("change",function(){
+  var v=this.value;if(!v)return;
+  var parts=v.split("-"),dt=new Date(+parts[0],+parts[1]-1,+parts[2]);
+  var dayName=DAYS_FR_LONG[dt.getDay()];
+  document.getElementById("ajouterDateDay").textContent=dayName+" "+parts[2]+" "+MONTHS_LONG_AD[+parts[1]-1]+" "+parts[0];
+  var pw=document.getElementById("ajouterPersonsWrap");pw.style.display="block";
+  var pf=document.getElementById("ajouterPersonsFields");pf.innerHTML="";
+  AJOUTER_SERVICES.forEach(function(svc){
+    var row=document.createElement("div");row.style.cssText="display:flex;align-items:center;gap:8px;margin-bottom:8px;";
+    var lbl=document.createElement("div");lbl.style.cssText="width:130px;font-size:11px;font-weight:700;color:var(--service-label);flex-shrink:0;line-height:1.3;";
+    lbl.textContent=svc.replace("Accueil - ","Acc. ").replace("Perches - ","Perches ");
+    var inp=document.createElement("input");
+    inp.type="text";inp.placeholder="Nom Prénom (laisser vide si absent)";inp.setAttribute("data-svc",svc);
+    inp.style.cssText="flex:1;padding:7px 10px;border:1.5px solid var(--accent);border-radius:8px;font-size:12px;font-family:inherit;background:var(--input-bg);color:var(--text);outline:none;";
+    var dl=document.createElement("datalist");var dlId="dlAD"+svc.replace(/[^a-zA-Z0-9]/g,"");
+    dl.id=dlId;inp.setAttribute("list",dlId);
+    Object.keys(personMap).sort().forEach(function(p){var opt=document.createElement("option");opt.value=p;dl.appendChild(opt);});
+    row.appendChild(lbl);row.appendChild(inp);row.appendChild(dl);
+    pf.appendChild(row);
+  });
+});
+
+document.getElementById("btnSubmitAjouterDate").addEventListener("click",function(){
+  var dateVal=document.getElementById("ajouterDateInput").value;
+  if(!dateVal){showToast("⚠️ Sélectionnez une date","warning");return;}
+  var parts=dateVal.split("-"),dt=new Date(+parts[0],+parts[1]-1,+parts[2]);
+  var dayName=DAYS_FR_LONG[dt.getDay()];
+  var monthLabel=MONTHS_LONG_AD[+parts[1]-1]+" "+parts[0];
+  var dateDisplay=dayName+" "+parts[2]+" "+MONTHS_LONG_AD[+parts[1]-1]+" "+parts[0];
+  var inputs=document.querySelectorAll("#ajouterPersonsFields input[data-svc]");
+  var count=0;
+  inputs.forEach(function(inp){
+    var svc=inp.getAttribute("data-svc"),person=(inp.value||"").trim();
+    if(!person)return;
+    RAW_DATA.push({date:dateVal,date_display:dateDisplay,day:dayName,service:svc,person:person,month:monthLabel});
+    if(!personMap[person])personMap[person]={services:{},total:0,mardis:0,samedis:0,mercredis:0};
+    if(!personMap[person].services[svc])personMap[person].services[svc]=[];
+    personMap[person].services[svc].push({date:dateDisplay,day:dayName,rawDate:dateVal});
+    personMap[person].total++;
+    if(dayName==="Mardi")personMap[person].mardis++;
+    else if(dayName==="Samedi")personMap[person].samedis++;
+    else if(dayName==="Mercredi")personMap[person].mercredis++;
+    if(!datePersonsMap[dateVal])datePersonsMap[dateVal]={persons:[],day:dayName};
+    if(datePersonsMap[dateVal].persons.indexOf(person)<0)datePersonsMap[dateVal].persons.push(person);
+    if(MONTHS.indexOf(monthLabel)<0)MONTHS.push(monthLabel);
+    count++;
+  });
+  if(!count){showToast("⚠️ Saisissez au moins une personne","warning");return;}
+  (function(){var sel=document.getElementById("monthFilter");var ex=[];for(var i=0;i<sel.options.length;i++)ex.push(sel.options[i].value);
+    MONTHS.forEach(function(m){if(ex.indexOf(m)<0){var o=document.createElement("option");o.value=m;o.textContent=m;sel.appendChild(o);}});})();
+  closeAjouterDate();
+  var wr=getCurrWeek();if(dateVal>=wr.s&&dateVal<=wr.e){weekFilter=true;document.querySelectorAll(".filter-btn[data-day]").forEach(function(b){b.classList.remove("active");});document.getElementById("filterWeek").classList.add("active");}
+  renderPlanning();
+  showToast("✅ "+count+" poste"+(count>1?"s":"")+" ajouté"+(count>1?"s":"")+" — "+dateDisplay,"success");
+});
+document.getElementById("ajouterDateOverlay").addEventListener("click",function(ev){if(ev.target===this)closeAjouterDate();});
+document.getElementById("btnCloseAjouterDate").addEventListener("click",closeAjouterDate);
 
 </script>
 </body>
