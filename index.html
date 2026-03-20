@@ -798,6 +798,9 @@ function statusKey(p,d,s){return p+"||"+d+"||"+s;}
 function getStatus(p,d,s){return statusMap[statusKey(p,d,s)]||"normal";}
 function setStatus(p,d,s,st){var prev=getStatus(p,d,s);statusMap[statusKey(p,d,s)]=st;if(prev!==st){var now=new Date();var ts=now.toLocaleDateString("fr-FR")+" "+now.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});modHistory.unshift({ts:ts,person:p,date:d,service:s,status:st,label:st==="remplacer"?"À remplacer":(st==="indisponible"?"Indisponible":"Disponible")});if(modHistory.length>50)modHistory=modHistory.slice(0,50);}lsSave();}
 function esc(s){if(!s)return"";return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+/* RGPD : affichage Prénom + initiale du nom — nom complet conservé uniquement dans le CSV */
+function dispName(p){if(!p)return"";var parts=p.trim().split(" ");if(parts.length<2)return p;var prenom=parts.slice(1).join(" ");return prenom+" "+parts[0].charAt(0)+".";}
+var currentPanelPerson="";
 function showToast(msg,type,dur){type=type||"info";dur=dur||2800;var tc=document.getElementById("toastContainer");var t=document.createElement("div");t.className="toast "+type;t.textContent=msg;tc.appendChild(t);setTimeout(function(){t.style.animation="toastOut 0.3s ease forwards";setTimeout(function(){if(t.parentNode)tc.removeChild(t);},300);},dur);}
 function isDispoOpen(){var n=new Date(),d=n.getDate();return d>=20&&d<=27;}
 var adminAuthenticated=false;
@@ -851,7 +854,7 @@ function renderPlanning(){
       for(var si=0;si<svcs.length;si+=2){html+='<div class="service-row">';
         for(var sj=si;sj<Math.min(si+2,svcs.length);sj++){var svc=svcs[sj],persons=info.services[svc];
           html+='<div class="service-cell"><div class="service-label">'+svcLabel(svc)+'</div><div class="service-persons">';
-          for(var ppi=0;ppi<persons.length;ppi++){var pn=persons[ppi],st=getStatus(pn,date,svc);html+='<span class="person-chip'+(st!=="normal"?" status-"+st:"")+'" data-person="'+esc(pn)+'" data-date="'+esc(date)+'" data-service="'+esc(svc)+'">'+esc(pn)+(st==="remplacer"?" ⚠️":(st==="indisponible"?" ❌":""))+"</span>";}
+          for(var ppi=0;ppi<persons.length;ppi++){var pn=persons[ppi],st=getStatus(pn,date,svc);html+='<span class="person-chip'+(st!=="normal"?" status-"+st:"")+'" data-person="'+esc(pn)+'" data-date="'+esc(date)+'" data-service="'+esc(svc)+'">'+esc(dispName(pn))+(st==="remplacer"?" ⚠️":(st==="indisponible"?" ❌":""))+"</span>";}
           html+="</div></div>";}
         if(svcs.length%2!==0&&si+2>svcs.length)html+='<div class="service-cell"></div>';html+="</div>";}
       html+='<div style="padding:8px 11px;border-top:1px solid var(--row-border)"><button class="btn-rappel-services" data-rappel-date="'+esc(date)+'" data-rappel-display="'+esc(info.display)+'">📱 Rappel services</button></div></div></div>';}}
@@ -868,7 +871,7 @@ function renderMyPlan(name){
   if(!name){banner.style.display="none";content.innerHTML='<div class="empty">Sélectionnez votre nom pour voir vos services</div>';return;}
   try{localStorage.setItem(LS_MYPLAN,name);}catch(e){}
   var info=personMap[name];if(!info){banner.style.display="none";content.innerHTML='<div class="empty">Aucun service trouvé</div>';return;}
-  banner.style.display="flex";document.getElementById("myplan-banner-name").textContent=name;document.getElementById("myplan-banner-sub").textContent=info.total+" service"+(info.total>1?"s":"")+" au total";
+  banner.style.display="flex";document.getElementById("myplan-banner-name").textContent=dispName(name);document.getElementById("myplan-banner-sub").textContent=info.total+" service"+(info.total>1?"s":"")+" au total";
   var myE=RAW_DATA.filter(function(d){return d.person===name;}).map(function(d){return{date:d.date,display:d.date_display,day:d.day,service:d.service,month:d.month};}).sort(function(a,b){return a.date>b.date?1:-1;});
   var byM={};myE.forEach(function(e){if(!byM[e.month])byM[e.month]=[];byM[e.month].push(e);});
   var html="";
@@ -877,7 +880,7 @@ function renderMyPlan(name){
       html+='<div class="date-section'+(isToday?" today-section":"")+'">'+(isToday?'<div class="today-label">📍 Aujourd\u0027hui</div>':'')+
         '<div class="date-header"><div class="date-badge '+dc+'">'+esc(e.display)+'</div><div class="date-line"></div></div>'+
         '<div class="services-grid"><div class="service-row"><div class="service-cell"><div class="service-label">'+svcLabel(e.service)+'</div>'+
-        '<div class="service-persons"><span class="person-chip'+(st!=="normal"?" status-"+st:"")+' highlighted" data-person="'+esc(name)+'" data-date="'+esc(e.date)+'" data-service="'+esc(e.service)+'">'+esc(name)+(st==="remplacer"?" ⚠️":(st==="indisponible"?" ❌":""))+"</span></div></div></div></div></div>";});});
+        '<div class="service-persons"><span class="person-chip'+(st!=="normal"?" status-"+st:"")+' highlighted" data-person="'+esc(name)+'" data-date="'+esc(e.date)+'" data-service="'+esc(e.service)+'">'+esc(dispName(name))+(st==="remplacer"?" ⚠️":(st==="indisponible"?" ❌":""))+"</span></div></div></div></div></div>";});});
   content.innerHTML=html;
 }
 
@@ -886,13 +889,14 @@ function renderPersons(q){
   var persons=Object.keys(personMap).filter(function(p){return!q||p.toLowerCase().indexOf(q)>=0;}).sort();
   if(!persons.length){document.getElementById("persons-content").innerHTML='<div class="empty">Aucune personne trouvée</div>';return;}
   var html='<div class="persons-grid">';
-  persons.forEach(function(p){var info=personMap[p];html+='<div class="person-card" data-person="'+esc(p)+'"><div class="person-name">'+esc(p)+'</div><div class="person-stats"><span class="stat-badge">⚡ '+info.total+' svc</span>'+(info.mardis?'<span class="stat-badge">'+info.mardis+' Mar</span>':"")+(info.samedis?'<span class="stat-badge">'+info.samedis+' Sam</span>':"")+(info.mercredis?'<span class="stat-badge">'+info.mercredis+' Mer</span>':"")+"</div></div>";});
+  persons.forEach(function(p){var info=personMap[p];html+='<div class="person-card" data-person="'+esc(p)+'"><div class="person-name">'+esc(dispName(p))+'</div><div class="person-stats"><span class="stat-badge">⚡ '+info.total+' svc</span>'+(info.mardis?'<span class="stat-badge">'+info.mardis+' Mar</span>':"")+(info.samedis?'<span class="stat-badge">'+info.samedis+' Sam</span>':"")+(info.mercredis?'<span class="stat-badge">'+info.mercredis+' Mer</span>':"")+"</div></div>";});
   html+="</div>";document.getElementById("persons-content").innerHTML=html;
 }
 
 function openPanel(name){
   var info=personMap[name];if(!info)return;
-  document.getElementById("panelName").textContent=name;
+  currentPanelPerson=name;
+  document.getElementById("panelName").textContent=dispName(name);
   var s='<span class="panel-stat">⚡ '+info.total+" service"+(info.total>1?"s":"")+"</span>";
   if(info.mardis)s+='<span class="panel-stat">'+info.mardis+" Mardi"+(info.mardis>1?"s":"")+"</span>";
   if(info.samedis)s+='<span class="panel-stat">'+info.samedis+" Samedi"+(info.samedis>1?"s":"")+"</span>";
@@ -923,7 +927,7 @@ function buildWAMsg(p,s,dd){return "📅 *Planning Sono & Accueil 2026*\n\nBonjo
 
 function openPopup(person,date,svc){
   popupCtx={person:person,date:date,service:svc};
-  document.getElementById("popupName").textContent=person;
+  document.getElementById("popupName").textContent=dispName(person);
   document.getElementById("popupService").innerHTML=svcLabel(svc);
   document.getElementById("popupDateInfo").textContent=getDateDisplay(date);
   var st=getStatus(person,date,svc),cur=document.getElementById("popupCurrent");
@@ -957,12 +961,12 @@ function applyStatus(st){
     else sugg.forEach(function(s){
       if(s.knowsService&&!sk){sk=true;ch+='<div style="width:100%;font-size:10px;font-weight:700;color:#0369A1;text-transform:uppercase;margin:4px 0 2px;">⭐ Connaît ce service</div>';}
       if(!s.knowsService&&!so&&sk){so=true;ch+='<div style="width:100%;font-size:10px;color:#9CA3AF;text-transform:uppercase;font-size:9px;margin:6px 0 2px;">Autres disponibles</div>';}
-      ch+='<div class="replacement-chip" data-repl="'+esc(s.name)+'">'+(s.knowsService?"⭐ ":"")+esc(s.name)+'<span class="repl-score">'+s.total+"</span></div>";});
+      ch+='<div class="replacement-chip" data-repl="'+esc(s.name)+'">'+(s.knowsService?"⭐ ":"")+esc(dispName(s.name))+'<span class="repl-score">'+s.total+"</span></div>";});
     document.getElementById("replChips").innerHTML=ch;
-    showToast("⚠️ "+popupCtx.person+" marqué·e à remplacer","warning");
+    showToast("⚠️ "+dispName(popupCtx.person)+" marqué·e à remplacer","warning");
   } else {document.getElementById("waSection").style.display="none";document.getElementById("replBox").style.display="none";showToast("✅ Statut mis à jour","success");}
   renderPlanning();if(currentTab==="myplan")renderMyPlan(document.getElementById("myPlanSelect").value);
-  if(document.getElementById("panel").classList.contains("open"))openPanel(document.getElementById("panelName").textContent);
+  if(document.getElementById("panel").classList.contains("open"))openPanel(currentPanelPerson);
 }
 
 function appliquerPeriode(){
@@ -977,7 +981,7 @@ function appliquerPeriode(){
   else{re.innerHTML="<strong>❌ "+affected.length+" service"+(affected.length>1?"s":"")+" marqué"+(affected.length>1?"s":"")+" indisponible"+(affected.length>1?"s":"")+"</strong><div class='periode-affected-list'>"+affected.map(function(a){return'<div class="periode-affected-item">'+svcIcon(a.service)+" "+esc(a.display)+"</div>";}).join("")+"</div>";
     showToast("❌ "+affected.length+" service(s) marqués indisponibles","warning");}
   renderPlanning();if(currentTab==="myplan")renderMyPlan(document.getElementById("myPlanSelect").value);
-  if(document.getElementById("panel").classList.contains("open"))openPanel(document.getElementById("panelName").textContent);
+  if(document.getElementById("panel").classList.contains("open"))openPanel(currentPanelPerson);
 }
 
 function sendWA(){
@@ -1047,7 +1051,7 @@ function renderStats(){
   Object.keys(svcC).sort(function(a,b){return svcC[b]-svcC[a];}).forEach(function(k){html+='<div class="service-stat-pill"><div class="ssp-label">'+esc(k.replace("Accueil - ","").replace("Perches - ","P."))+'</div><div class="ssp-value">'+svcC[k]+'</div><div class="ssp-sub">postes</div></div>';});
   html+="</div></div>";
   html+='<div class="stats-section"><div class="stats-section-title">👥 Top 15</div><div class="chart-bar-wrap">';
-  sorted.slice(0,15).forEach(function(p){var info=personMap[p];html+='<div class="chart-bar-row"><div class="chart-bar-name" title="'+esc(p)+'">'+esc(p.split(" ")[0])+'</div><div class="chart-bar-track"><div class="chart-bar-fill" style="width:'+Math.round(info.total/maxT*100)+'%"></div></div><div class="chart-bar-val">'+info.total+"</div></div>";});
+  sorted.slice(0,15).forEach(function(p){var info=personMap[p];html+='<div class="chart-bar-row"><div class="chart-bar-name" title="'+esc(dispName(p))+'">'+esc(dispName(p))+'</div><div class="chart-bar-track"><div class="chart-bar-fill" style="width:'+Math.round(info.total/maxT*100)+'%"></div></div><div class="chart-bar-val">'+info.total+"</div></div>";});
   html+="</div></div>";
   document.getElementById("stats-content").innerHTML=html;
 }
@@ -1107,7 +1111,7 @@ function initDispoTab(){
   document.getElementById("dispo-month-label").textContent=MONTHS_FR[nm.getMonth()]+" "+nm.getFullYear();
   document.getElementById("dispo-deadline-label").textContent="Clôture le 27 "+MONTHS_FR[now.getMonth()]+" "+now.getFullYear();
   var sel=document.getElementById("dispoSelect");sel.innerHTML='<option value="">-- Sélectionnez votre nom --</option>';
-  PERSONS.forEach(function(p){var o=document.createElement("option");o.value=p;o.textContent=p;sel.appendChild(o);});
+  PERSONS.forEach(function(p){var o=document.createElement("option");o.value=p;o.textContent=dispName(p);sel.appendChild(o);});
   updateDispoCount();
 }
 function promptAdminPassword(){
@@ -1136,7 +1140,7 @@ function submitDispo(){
   dates.forEach(function(dt){entry[dt.label+" - Dispo"]=dispoState[dt.dateStr].dispo;entry[dt.label+" - Programme"]=dispoState[dt.dateStr].prog||"";});
   dispoResponses.push(entry);lsSave();
   var nm=new Date(now.getFullYear(),now.getMonth()+1,1);
-  document.getElementById("dispo-success-text").textContent="Disponibilités de "+name+" pour "+MONTHS_FR[nm.getMonth()]+" "+nm.getFullYear()+" enregistrées.";
+  document.getElementById("dispo-success-text").textContent="Disponibilités de "+dispName(name)+" pour "+MONTHS_FR[nm.getMonth()]+" "+nm.getFullYear()+" enregistrées.";
   document.getElementById("dispo-form-wrap").style.display="none";document.getElementById("dispo-success").classList.add("show");
   updateDispoCount();renderAdminTable();showToast("🎉 Disponibilités enregistrées !","success");
 }
@@ -1144,7 +1148,7 @@ function renderAdminTable(){
   var c=document.getElementById("admin-table-content");
   if(!dispoResponses.length){c.innerHTML='<div class="admin-empty">Aucune réponse pour le moment.</div>';return;}
   var keys=Object.keys(dispoResponses[0]),html='<table class="admin-table"><thead><tr>'+keys.map(function(k){return"<th>"+esc(k)+"</th>";}).join("")+"</tr></thead><tbody>";
-  dispoResponses.forEach(function(r){html+="<tr>"+keys.map(function(k){var v=r[k]||"";return"<td>"+(v==="oui"?'<span class="badge-dispo badge-oui">✓ Oui</span>':(v==="non"?'<span class="badge-dispo badge-non">✕ Non</span>':v))+"</td>";}).join("")+"</tr>";});
+  dispoResponses.forEach(function(r){html+="<tr>"+keys.map(function(k){var v=r[k]||"";var display=k==="nom"?esc(dispName(v)):( v==="oui"?'<span class="badge-dispo badge-oui">✓ Oui</span>':(v==="non"?'<span class="badge-dispo badge-non">✕ Non</span>':esc(v)));return"<td>"+display+"</td>";}).join("")+"</tr>";});
   c.innerHTML=html+"</tbody></table>";
 }
 function exportCSV(){
